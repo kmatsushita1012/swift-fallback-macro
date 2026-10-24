@@ -75,6 +75,36 @@ struct FallbackMacroTests {
         )
     }
 
+    @Test func `generates accessors for a selector closure`() {
+        assertMacroExpansion(
+            #"""
+            struct State {
+              let parent: Parent
+              @Fallback(select: { (state: State) in state.parent.child })
+              var child: Child
+            }
+            """#,
+            expandedSource: #"""
+            struct State {
+              let parent: Parent
+              var child: Child {
+                  get {
+                      ({ (state: State) in
+                              state.parent.child
+                          })(self) ?? self._child
+                  }
+                  set {
+                      self._child = newValue
+                  }
+              }
+
+              private var _child: Child
+            }
+            """#,
+            macros: macros
+        )
+    }
+
     @Test func `diagnoses let property`() {
         assertMacroExpansion(
             #"""

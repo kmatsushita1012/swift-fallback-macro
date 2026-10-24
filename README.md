@@ -1,6 +1,6 @@
 # swift-fallback-macro
 
-`@Fallback` は、指定した Optional の KeyPath を優先して読み取り、参照先が `nil` のときだけローカル値を返す Swift マクロです。書き込みはローカル値だけを更新します。
+`@Fallback` は、指定した Optional の KeyPath またはクロージャを優先して読み取り、参照先が `nil` のときだけローカル値を返す Swift マクロです。書き込みはローカル値だけを更新します。
 
 ## 要件
 
@@ -52,6 +52,15 @@ struct State {
 
 KeyPath のRoot型は明記してください。仕様書の `@Fallback(\.parent.child)` は現行SwiftではRoot型を推論できず、マクロ引数としてコンパイルできないため、`@Fallback(\State.parent.child)` の形を使います。KeyPath末尾の型はプロパティ型の Optional である必要があり、型の整合性はSwiftコンパイラが検査します。
 
+クロージャで選択する場合は、`select:` 引数を使い、Root型を引数に注釈します。
+
+```swift
+@Fallback(select: { (state: State) in state.parent.child })
+var child: Child
+```
+
+クロージャの戻り値もプロパティ型の Optional である必要があります。クロージャは読み取りごとに呼び出されます。
+
 参照先が非 `nil` なら参照先を返します。参照先が `nil` ならローカルのfallback値を返します。`state.child = value` はローカル値だけを更新します。ローカル値は `self._child` として初期化してください。
 
 ## `@Shared` とTCA
@@ -88,7 +97,7 @@ swift test --package-path Tests/Integration
 ## 制約
 
 - `struct` 内の、明示的な型を持つ単一の `var` Stored Property に適用します。
-- KeyPath は Optional 値を返す必要があります。
+- KeyPathまたは`select:`クロージャはOptional値を返す必要があります。
 - `let`、計算プロパティ、複数宣言を含むプロパティには適用できません。
 - fallbackストレージは `_<propertyName>` として生成されます。型のinitializerから初期化してください。
 - 既存プロパティとfallbackストレージ名が重複すると、Swiftコンパイラの再宣言エラーになります。

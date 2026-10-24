@@ -11,7 +11,7 @@ public struct FallbackMacro: AccessorMacro, PeerMacro {
     ) throws -> [AccessorDeclSyntax] {
         guard
             let property = propertyInfo(from: node, declaration: declaration, context: context),
-            let keyPath = keyPathExpression(from: node)
+            let selectedValue = selectedValueExpression(from: node)
         else {
             return []
         }
@@ -22,10 +22,10 @@ public struct FallbackMacro: AccessorMacro, PeerMacro {
             guard let identifier = declaration.as(VariableDeclSyntax.self)?.bindings.first?
                 .pattern.as(IdentifierPatternSyntax.self)?.identifier.text
             else { return [] }
-            getter = "get { _$observationRegistrar.access(self, keyPath: \\.\(identifier)); return self[keyPath: \(keyPath)] ?? self.\(property.storageName) }"
+            getter = "get { _$observationRegistrar.access(self, keyPath: \\.\(identifier)); return \(selectedValue) ?? self.\(property.storageName) }"
             setter = "set { _$observationRegistrar.mutate(self, keyPath: \\.\(identifier), &self.\(property.storageName), newValue, _$isIdentityEqual) }"
         } else {
-            getter = "get { self[keyPath: \(keyPath)] ?? self.\(property.storageName) }"
+            getter = "get { \(selectedValue) ?? self.\(property.storageName) }"
             setter = "set { self.\(property.storageName) = newValue }"
         }
 
@@ -73,7 +73,7 @@ public struct FallbackMacro: AccessorMacro, PeerMacro {
               binding.accessorBlock == nil,
               let identifier = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier,
               let type = binding.typeAnnotation?.type,
-              keyPathExpression(from: node) != nil,
+              selectedValueExpression(from: node) != nil,
               !isObservableState(context.lexicalContext) || hasAttribute("ObservationStateIgnored", on: variable)
         else {
             return nil
@@ -82,16 +82,23 @@ public struct FallbackMacro: AccessorMacro, PeerMacro {
         return PropertyInfo(storageName: "_\(identifier.text)", type: type)
     }
 
-    private static func keyPathExpression(from node: AttributeSyntax) -> String? {
+    private static func selectedValueExpression(from node: AttributeSyntax) -> String? {
         guard case let .argumentList(arguments) = node.arguments,
               arguments.count == 1,
-              let argument = arguments.first,
-              argument.label == nil,
-              argument.expression.is(KeyPathExprSyntax.self)
+              let argument = arguments.first
         else {
             return nil
         }
-        return argument.expression.trimmedDescription
+
+        if argument.label == nil, argument.expression.is(KeyPathExprSyntax.self) {
+            return "self[keyPath: \(argument.expression.trimmedDescription)]"
+        }
+
+        if argument.label?.text == "select" {
+            return "(\(argument.expression.trimmedDescription))(self)"
+        }
+
+        return nil
     }
 
     private static func isObservableState(_ lexicalContext: [Syntax]) -> Bool {
@@ -130,8 +137,8 @@ public struct FallbackMacro: AccessorMacro, PeerMacro {
         } else if let binding = declaration.as(VariableDeclSyntax.self)?.bindings.first,
                   binding.accessorBlock != nil {
             message = .storedPropertyOnly
-        } else if keyPathExpression(from: node) == nil {
-            message = .keyPathRequired
+        } else if selectedValueExpression(from: node) == nil {
+            message = .selectionRequired
         } else {
             message = .storedPropertyOnly
         }
@@ -148,7 +155,7 @@ private struct FallbackDiagnostic: DiagnosticMessage {
         case explicitTypeRequired
         case singlePropertyOnly
         case storedPropertyOnly
-        case keyPathRequired
+        case selectionRequired
         case observationStateIgnoredRequired
     }
 
@@ -176,8 +183,8 @@ private struct FallbackDiagnostic: DiagnosticMessage {
             "@Fallback can only be applied to a declaration with one property"
         case .storedPropertyOnly:
             "@Fallback requires a stored property"
-        case .keyPathRequired:
-            "@Fallback requires one key path argument"
+        case .selectionRequired:
+            "@Fallback requires one key path argument or one 'select' closure argument"
         case .observationStateIgnoredRequired:
             "Add @ObservationStateIgnored to this property when using @ObservableState"
         }

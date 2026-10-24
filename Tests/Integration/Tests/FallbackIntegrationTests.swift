@@ -33,9 +33,14 @@ private struct ObservableFeature {
         @ObservationStateIgnored
         var child: Child
 
-        init(parent: Shared<Parent>, initialChild: Child) {
+        @Fallback(select: { (state: State) in state.parent.context.district })
+        @ObservationStateIgnored
+        var district: String
+
+        init(parent: Shared<Parent>, initialChild: Child, initialDistrict: String = "local district") {
             self._parent = parent
             self._child = initialChild
+            self._district = initialDistrict
         }
     }
 
@@ -85,6 +90,7 @@ struct FallbackIntegrationTests {
         let second = ObservableFeature.State(parent: sharedParent, initialChild: Child(name: "other local"))
 
         #expect(first.child.name == "local")
+        #expect(first.district == "local district")
         first.child = Child(name: "updated local")
         #expect(first.child.name == "updated local")
         #expect(first.parent.child == nil)
@@ -93,9 +99,18 @@ struct FallbackIntegrationTests {
         #expect(first.child.name == "shared")
         #expect(second.child.name == "shared")
 
-        first.$parent.withLock { $0.child = nil }
+        first.$parent.withLock {
+            $0.child = nil
+            $0.context.district = "shared district"
+        }
         #expect(first.child.name == "updated local")
         #expect(second.child.name == "other local")
+        #expect(first.district == "shared district")
+        #expect(second.district == "shared district")
+
+        first.$parent.withLock { $0.context.district = nil }
+        #expect(first.district == "local district")
+        #expect(second.district == "local district")
     }
 
     @Test func `observable state tracks fallback and shared changes`() {
@@ -122,6 +137,17 @@ struct FallbackIntegrationTests {
         state.$parent.withLock { $0.child = Child(name: "shared") }
         #expect(didChange.value, "Updating the shared reference should invalidate an observation of child")
         #expect(state.child.name == "shared")
+
+        didChange.reset()
+        withObservationTracking {
+            _ = state.district
+        } onChange: {
+            didChange.set()
+        }
+
+        state.$parent.withLock { $0.context.district = "shared district" }
+        #expect(didChange.value, "Updating the shared reference should invalidate an observation of the selected closure value")
+        #expect(state.district == "shared district")
     }
 
     @Test @MainActor func `reducer writes fallback without changing shared parent`() async {
