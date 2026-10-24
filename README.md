@@ -13,7 +13,7 @@
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/kmatsushita1012/swift-fallback-macro", from: "0.1.0")
+    .package(url: "https://github.com/kmatsushita1012/swift-fallback-macro", from: "0.2.0")
 ]
 ```
 
