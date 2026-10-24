@@ -1,13 +1,13 @@
 import SwiftSyntaxMacros
 import SwiftSyntaxMacrosTestSupport
-import XCTest
+import Testing
 
 @testable import FallbackMacros
 
-final class FallbackMacroTests: XCTestCase {
+struct FallbackMacroTests {
     private let macros: [String: Macro.Type] = ["Fallback": FallbackMacro.self]
 
-    func testGeneratesAccessorsAndPrivateStorage() {
+    @Test func `generates accessors and private storage`() {
         assertMacroExpansion(
             #"""
             struct State {
@@ -35,7 +35,7 @@ final class FallbackMacroTests: XCTestCase {
         )
     }
 
-    func testSupportsMultiLevelKeyPathsAndMultipleProperties() {
+    @Test func `supports multi-level key paths and multiple properties`() {
         assertMacroExpansion(
             #"""
             struct State {
@@ -75,7 +75,7 @@ final class FallbackMacroTests: XCTestCase {
         )
     }
 
-    func testDiagnosesLetProperty() {
+    @Test func `diagnoses let property`() {
         assertMacroExpansion(
             #"""
             struct State {
@@ -96,7 +96,7 @@ final class FallbackMacroTests: XCTestCase {
         )
     }
 
-    func testDiagnosesMissingType() {
+    @Test func `diagnoses missing type`() {
         assertMacroExpansion(
             #"""
             struct State {

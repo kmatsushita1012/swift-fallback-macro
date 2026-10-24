@@ -1,8 +1,9 @@
 import ComposableArchitecture
 import Fallback
+import Foundation
 import Observation
 import Sharing
-import XCTest
+import Testing
 
 private struct Child: Equatable, Sendable {
     var name: String
@@ -53,7 +54,8 @@ private struct ObservableFeature {
     }
 }
 
-final class FallbackIntegrationTests: XCTestCase {
+@Suite(.serialized)
+struct FallbackIntegrationTests {
     private final class ChangeFlag: @unchecked Sendable {
         private let lock = NSLock()
         private var changed = false
@@ -77,26 +79,26 @@ final class FallbackIntegrationTests: XCTestCase {
         }
     }
 
-    func testSharedChangesAreReadDynamicallyAndFallbackDoesNotWriteSharedValue() {
+    @Test func `shared changes are read dynamically and fallback does not write shared value`() {
         let sharedParent = Shared(value: Parent(context: Context(child: nil, district: nil)))
         var first = ObservableFeature.State(parent: sharedParent, initialChild: Child(name: "local"))
         let second = ObservableFeature.State(parent: sharedParent, initialChild: Child(name: "other local"))
 
-        XCTAssertEqual(first.child.name, "local")
+        #expect(first.child.name == "local")
         first.child = Child(name: "updated local")
-        XCTAssertEqual(first.child.name, "updated local")
-        XCTAssertNil(first.parent.child)
+        #expect(first.child.name == "updated local")
+        #expect(first.parent.child == nil)
 
         first.$parent.withLock { $0.child = Child(name: "shared") }
-        XCTAssertEqual(first.child.name, "shared")
-        XCTAssertEqual(second.child.name, "shared")
+        #expect(first.child.name == "shared")
+        #expect(second.child.name == "shared")
 
         first.$parent.withLock { $0.child = nil }
-        XCTAssertEqual(first.child.name, "updated local")
-        XCTAssertEqual(second.child.name, "other local")
+        #expect(first.child.name == "updated local")
+        #expect(second.child.name == "other local")
     }
 
-    func testObservableStateTracksFallbackAndSharedChanges() {
+    @Test func `observable state tracks fallback and shared changes`() {
         let sharedParent = Shared(value: Parent(context: Context(child: nil, district: nil)))
         var state = ObservableFeature.State(parent: sharedParent, initialChild: Child(name: "initial"))
         let didChange = ChangeFlag()
@@ -108,7 +110,7 @@ final class FallbackIntegrationTests: XCTestCase {
         }
 
         state.child = Child(name: "updated")
-        XCTAssertTrue(didChange.value, "Writing the local fallback should invalidate an observation of child")
+        #expect(didChange.value, "Writing the local fallback should invalidate an observation of child")
 
         didChange.reset()
         withObservationTracking {
@@ -118,12 +120,11 @@ final class FallbackIntegrationTests: XCTestCase {
         }
 
         state.$parent.withLock { $0.child = Child(name: "shared") }
-        XCTAssertTrue(didChange.value, "Updating the shared reference should invalidate an observation of child")
-        XCTAssertEqual(state.child.name, "shared")
+        #expect(didChange.value, "Updating the shared reference should invalidate an observation of child")
+        #expect(state.child.name == "shared")
     }
 
-    @MainActor
-    func testReducerCanWriteFallbackWithoutChangingSharedParent() async {
+    @Test @MainActor func `reducer writes fallback without changing shared parent`() async {
         let parent = Shared(value: Parent(context: Context(child: nil, district: nil)))
         let store = TestStore(
             initialState: ObservableFeature.State(parent: parent, initialChild: Child(name: "initial"))
@@ -134,8 +135,8 @@ final class FallbackIntegrationTests: XCTestCase {
         await store.send(.setChild(Child(name: "updated"))) {
             $0.child = Child(name: "updated")
         }
-        XCTAssertNil(parent.wrappedValue.child)
+        #expect(parent.wrappedValue.child == nil)
         let childName = store.state.child.name
-        XCTAssertEqual(childName, "updated")
+        #expect(childName == "updated")
     }
 }
